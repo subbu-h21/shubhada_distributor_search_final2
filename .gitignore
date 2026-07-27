@@ -88,3 +88,10 @@ credentials.json
 .credentials
 .pw-browsers/chromium-1228/chrome-linux/chrome
 .pw-browsers/chromium_headless_shell-1228/chrome-linux/headless_shell
+
+# Playwright browser download — regenerate with `playwright install chromium`, ~200MB+, never belongs in git
+.pw-browsers/
+
+# Runtime-generated extraction screenshots — see backend/server.py SCREENSHOT_RETENTION_DAYS cleanup;
+# these are ephemeral debug artifacts, not source, and grow unbounded if committed
+backend/data/screenshots/
