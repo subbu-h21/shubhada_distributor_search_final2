@@ -19,21 +19,10 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM 3.11 or 3.12 both work fine - 3.14+ hits a real dependency conflict
-REM (google-api-core needs grpcio-status>=1.75.1 on Python 3.14+, but
-REM requirements.txt pins grpcio-status==1.71.2), unrelated to anything
-REM this app actually uses. Prefer the newer of the two that's compatible.
-set PYVER=
-py -3.12 -c "print(1)" >nul 2>&1
-if not errorlevel 1 set PYVER=3.12
-if not defined PYVER (
-    py -3.11 -c "print(1)" >nul 2>&1
-    if not errorlevel 1 set PYVER=3.11
-)
-if not defined PYVER (
-    echo [ERROR] Python 3.11 or 3.12 not found via the "py" launcher.
-    echo         Install Python 3.12 first: https://www.python.org/downloads/
-    echo         ^(3.14+ is known to fail - see CLAUDE.md for why^)
+where py >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Python not found. Install Python first:
+    echo         https://www.python.org/downloads/
     pause
     exit /b 1
 )
@@ -46,7 +35,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [OK] Docker, Python !PYVER!, and Node.js found.
+echo [OK] Docker, Python, and Node.js found.
 echo.
 
 REM --- Make sure Docker Desktop is actually running (needed below) ---
@@ -68,8 +57,8 @@ echo.
 
 REM --- Backend virtual environment ---
 if not exist "backend\.venv\Scripts\python.exe" (
-    echo Creating backend virtual environment - Python !PYVER!...
-    py -!PYVER! -m venv "backend\.venv"
+    echo Creating backend virtual environment...
+    py -3 -m venv "backend\.venv"
 ) else (
     echo Backend virtual environment already exists, skipping.
 )
@@ -84,6 +73,9 @@ if not exist "backend\requirements.local.txt" (
 "backend\.venv\Scripts\python.exe" -m pip install -r "backend\requirements.local.txt"
 if errorlevel 1 (
     echo [ERROR] Backend dependency install failed - see the output above.
+    echo         If you're on a very new Python version, this may be a
+    echo         real package incompatibility - try installing Python
+    echo         3.11 or 3.12 alongside your current version and rerun.
     pause
     exit /b 1
 )
