@@ -11,6 +11,7 @@ Covers:
 """
 import os
 import re
+import time
 import pytest
 import requests
 
@@ -67,6 +68,29 @@ def _find(targets, portal_type=None, name_contains=None):
     return None
 
 
+def _extract_and_wait(headers, tid, product=PRODUCT, quantity=QTY, timeout=EXTRACT_TIMEOUT):
+    """POST /api/extract only kicks off a background task (fire-and-poll, to
+    dodge Cloudflare's ~100s edge timeout) — poll /api/extract/status/{task_id}
+    for the actual history-entry result."""
+    r = requests.post(f"{API}/extract",
+                       json={"product": product, "quantity": quantity, "target_ids": [tid]},
+                       headers=headers, timeout=30)
+    assert r.status_code == 200, f"extract kickoff HTTP {r.status_code}: {r.text[:400]}"
+    task_id = r.json().get("task_id")
+    assert task_id, f"no task_id in kickoff response: {r.text[:400]}"
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        sr = requests.get(f"{API}/extract/status/{task_id}", headers=headers, timeout=30)
+        assert sr.status_code == 200, f"extract/status HTTP {sr.status_code}: {sr.text[:400]}"
+        data = sr.json()
+        if data.get("status") == "done":
+            assert not data.get("error"), f"extract task failed: {data['error']}"
+            return data.get("result") or {}
+        time.sleep(3)
+    raise AssertionError(f"extract task {task_id} did not complete within {timeout}s")
+
+
 # ---------- CHETHANA / CHIRAG PHARMA (the bug fix under test) ----------
 class TestChethanaColorStatus:
     def test_chirag_pharma_target_exists(self, targets):
@@ -77,10 +101,7 @@ class TestChethanaColorStatus:
     def test_extract_returns_stock_status_and_color_screenshot(self, targets, auth_headers):
         d = _find(targets, portal_type="CHETHANA", name_contains="CHIRAG")
         assert d is not None
-        payload = {"product": PRODUCT, "quantity": QTY, "target_ids": [d["id"]]}
-        r = requests.post(f"{API}/extract", json=payload, headers=auth_headers, timeout=EXTRACT_TIMEOUT)
-        assert r.status_code == 200, f"extract failed: {r.status_code} {r.text[:500]}"
-        body = r.json()
+        body = _extract_and_wait(auth_headers, d["id"])
         history_id = body.get("id")
         assert history_id
         results = body.get("results") or []
@@ -130,10 +151,8 @@ class TestSunshopRegression:
             d = _find(targets, name_contains="SAROJ") or _find(targets, name_contains="HEGDE")
         if not d:
             pytest.skip("No SUNSHOP distributor configured")
-        payload = {"product": PRODUCT, "quantity": QTY, "target_ids": [d["id"]]}
-        r = requests.post(f"{API}/extract", json=payload, headers=auth_headers, timeout=EXTRACT_TIMEOUT)
-        assert r.status_code == 200, r.text[:500]
-        result = (r.json().get("results") or [{}])[0]
+        body = _extract_and_wait(auth_headers, d["id"])
+        result = (body.get("results") or [{}])[0]
         assert result.get("status") in ("SUCCESS", "NOT_FOUND"), (
             f"SUNSHOP status regressed to {result.get('status')}: {result.get('detail')}"
         )

@@ -274,8 +274,8 @@ async def seed_if_empty():
             {"name": "HEGDE BROTHER", "url": "https://www.sunshop.co.in", "portal": "SUNSHOP", "portalType": "SUNSHOP"},
             {"name": "KAPILA PHARMA", "url": "https://www.sunshop.co.in", "portal": "SUNSHOP", "portalType": "SUNSHOP"},
             {"name": "KAPILA MEDICAL AGENCIES", "url": "https://www.sunshop.co.in", "portal": "SUNSHOP", "portalType": "SUNSHOP"},
-            {"name": "CHIRAG PHARMA", "url": "http://www.chethanapharma.in", "portal": "CHETHANA", "portalType": "GENERIC"},
-            {"name": "VARDHAMAN MEDISALES PVT LTD", "url": "http://easysol.co.in", "portal": "VARDHAMAN", "portalType": "GENERIC"},
+            {"name": "CHIRAG PHARMA", "url": "http://www.chethanapharma.in", "portal": "CHETHANA", "portalType": "CHETHANA"},
+            {"name": "VARDHAMAN MEDISALES PVT LTD", "url": "http://easysol.co.in", "portal": "VARDHAMAN", "portalType": "VARDHAMAN"},
             {"name": "RETAILIO", "url": "https://order.retailio.in/rio/secure-login", "portal": "RETAILIO", "portalType": "RETAILIO"},
         ]
         docs = []
@@ -1317,6 +1317,20 @@ async def on_startup():
                 logger.info(f"Repointed CHETHANA PHARMA to CHETHANA adapter ({fixed.modified_count} row)")
         except Exception as e:
             logger.warning(f"CHETHANA PHARMA migration skipped: {e}")
+        # Fix any distributor stuck on portalType=GENERIC when its `portal`
+        # field actually maps to a dedicated adapter (e.g. CHIRAG PHARMA /
+        # VARDHAMAN MEDISALES were seeded with portalType hardcoded to
+        # GENERIC instead of being inferred). Idempotent, keyed off `portal`
+        # rather than a specific name so it self-heals future cases too.
+        try:
+            generic_docs = await db.targets.find({"portalType": "GENERIC"}).to_list(1000)
+            for doc in generic_docs:
+                inferred = infer_portal_type(doc.get("portal", ""))
+                if inferred != "GENERIC":
+                    await db.targets.update_one({"id": doc["id"]}, {"$set": {"portalType": inferred}})
+                    logger.info(f"Repointed {doc.get('name')} from GENERIC to {inferred} adapter")
+        except Exception as e:
+            logger.warning(f"GENERIC portalType migration skipped: {e}")
         # Ensure MARG (ALL SUPPLIERS) distributor exists (aggregator entry)
         try:
             marg_existing = await db.targets.count_documents({"portalType": "MARG"})

@@ -8,7 +8,7 @@ Coverage:
   5. SUNSHOP: no ERROR regression
   6. Manual-pick still works via /api/extract/manual-pick
 """
-import os, pytest, requests
+import os, time, pytest, requests
 
 def _base():
     v = os.environ.get("REACT_APP_BACKEND_URL")
@@ -51,12 +51,31 @@ def _find(targets, name_sub, portal_type=None):
     return None
 
 
-def _extract(headers, tid, product=PRODUCT, quantity=QTY):
+def _extract_and_wait(headers, tid, product=PRODUCT, quantity=QTY, timeout=EXTRACT_TIMEOUT):
+    """POST /api/extract only kicks off a background task (fire-and-poll, to
+    dodge Cloudflare's ~100s edge timeout) — poll /api/extract/status/{task_id}
+    for the actual history-entry result."""
     r = requests.post(f"{API}/extract",
                       json={"product": product, "quantity": quantity, "target_ids": [tid]},
-                      headers=headers, timeout=EXTRACT_TIMEOUT)
-    assert r.status_code == 200, f"extract HTTP {r.status_code}: {r.text[:400]}"
-    body = r.json()
+                      headers=headers, timeout=30)
+    assert r.status_code == 200, f"extract kickoff HTTP {r.status_code}: {r.text[:400]}"
+    task_id = r.json().get("task_id")
+    assert task_id, f"no task_id in kickoff response: {r.text[:400]}"
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        sr = requests.get(f"{API}/extract/status/{task_id}", headers=headers, timeout=30)
+        assert sr.status_code == 200, f"extract/status HTTP {sr.status_code}: {sr.text[:400]}"
+        data = sr.json()
+        if data.get("status") == "done":
+            assert not data.get("error"), f"extract task failed: {data['error']}"
+            return data.get("result") or {}
+        time.sleep(3)
+    raise AssertionError(f"extract task {task_id} did not complete within {timeout}s")
+
+
+def _extract(headers, tid, product=PRODUCT, quantity=QTY):
+    body = _extract_and_wait(headers, tid, product=product, quantity=quantity)
     return body, (body.get("results") or [{}])[0]
 
 

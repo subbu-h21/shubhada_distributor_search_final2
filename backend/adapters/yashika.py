@@ -158,10 +158,22 @@ class YashikaAdapter(BaseAdapter):
                     else if (midCount === 4) { company = lines[i] + ' ' + lines[i+1]; pack = lines[i+2]; scheme = lines[i+3]; }
                     else { company = lines.slice(i, stockPos).join(' '); }
                     const stock = lines[stockPos];
-                    const mrp = lines[stockPos + 1] || '';
-                    const rate = lines[stockPos + 2] || '';
+                    // MRP/Rate cells render no text node at all for out-of-stock rows,
+                    // so only consume the following lines as mrp/rate when they actually
+                    // look like a price — otherwise they belong to the NEXT row's
+                    // name/company and must be left for the next iteration.
+                    const isPrice = (s) => /^\d+(\.\d+)?$/.test((s || '').trim());
+                    let mrp = '', rate = '', next = stockPos + 1;
+                    if (isPrice(lines[stockPos + 1])) {
+                        mrp = lines[stockPos + 1];
+                        next = stockPos + 2;
+                        if (isPrice(lines[stockPos + 2])) {
+                            rate = lines[stockPos + 2];
+                            next = stockPos + 3;
+                        }
+                    }
                     rows.push({ name, company, pack, scheme, stock, mrp, rate });
-                    i = stockPos + 3;
+                    i = next;
                 }
                 return { rows };
             }""") or {"rows": []}
