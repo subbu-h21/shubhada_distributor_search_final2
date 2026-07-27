@@ -94,10 +94,28 @@ echo Installing Playwright's Chromium browser...
 echo.
 
 REM --- backend\.env (secrets - never overwrite if it already exists) ---
+REM Generated via temp-file redirection rather than `for /f ('command')`
+REM command-capture - that form is fragile with a quoted exe path followed
+REM by a quoted -c argument (nested quotes inside the captured command
+REM confuse cmd.exe's parser on some Windows/cmd builds) and can fail
+REM silently, leaving JWT_SECRET/ENC_KEY empty with no error shown.
 if not exist "backend\.env" (
     echo Generating backend\.env with fresh secrets...
-    for /f %%A in ('"backend\.venv\Scripts\python.exe" -c "import secrets;print(secrets.token_hex(32))"') do set JWT_SECRET=%%A
-    for /f %%A in ('"backend\.venv\Scripts\python.exe" -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"') do set ENC_KEY=%%A
+    "backend\.venv\Scripts\python.exe" -c "import secrets;print(secrets.token_hex(32))" > "%TEMP%\ps_jwt.tmp"
+    "backend\.venv\Scripts\python.exe" -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())" > "%TEMP%\ps_enc.tmp"
+    set /p JWT_SECRET=<"%TEMP%\ps_jwt.tmp"
+    set /p ENC_KEY=<"%TEMP%\ps_enc.tmp"
+    del "%TEMP%\ps_jwt.tmp" "%TEMP%\ps_enc.tmp" >nul 2>&1
+    if not defined JWT_SECRET (
+        echo [ERROR] Failed to generate JWT_SECRET - see any Python errors above.
+        pause
+        exit /b 1
+    )
+    if not defined ENC_KEY (
+        echo [ERROR] Failed to generate ENCRYPTION_KEY - see any Python errors above.
+        pause
+        exit /b 1
+    )
     (
         echo MONGO_URL=mongodb://localhost:27017
         echo DB_NAME=pharmascrape
@@ -132,7 +150,17 @@ if not exist "frontend\.env" (
 )
 
 echo Enabling corepack (fetches the exact pinned yarn version)...
-call corepack enable >nul 2>&1
+call corepack enable
+where yarn >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] "yarn" still isn't available after "corepack enable" - see any
+    echo         error output above. This is commonly a permissions issue if
+    echo         Node.js is installed under Program Files ^(corepack needs to
+    echo         write shim files next to node.exe^). Try rerunning this script
+    echo         as Administrator, or run: npm install -g yarn
+    pause
+    exit /b 1
+)
 
 echo Installing frontend dependencies (this can take a few minutes)...
 pushd frontend
