@@ -48,7 +48,7 @@ start "PharmaScrape Backend" cmd /k "cd /d "%~dp0backend" && .venv\Scripts\pytho
 
 REM --- Frontend, in its own window ---
 echo Starting frontend on http://localhost:3000 ...
-start "PharmaScrape Frontend" cmd /k "cd /d "%~dp0frontend" && yarn start"
+start "PharmaScrape Frontend" cmd /k "cd /d "%~dp0frontend" && corepack yarn start"
 
 echo.
 echo ============================================

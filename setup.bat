@@ -149,22 +149,15 @@ if not exist "frontend\.env" (
     echo frontend\.env already exists, leaving it alone.
 )
 
-echo Enabling corepack (fetches the exact pinned yarn version)...
-call corepack enable
-where yarn >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] "yarn" still isn't available after "corepack enable" - see any
-    echo         error output above. This is commonly a permissions issue if
-    echo         Node.js is installed under Program Files ^(corepack needs to
-    echo         write shim files next to node.exe^). Try rerunning this script
-    echo         as Administrator, or run: npm install -g yarn
-    pause
-    exit /b 1
-)
-
 echo Installing frontend dependencies (this can take a few minutes)...
+REM Run the pinned yarn version straight through corepack instead of
+REM `corepack enable` + `yarn`. `enable` installs shim files next to
+REM node.exe so bare `yarn` works anywhere - if Node is under Program
+REM Files that write needs admin rights and fails with EPERM. Invoking
+REM `corepack yarn` directly skips that step entirely: no shims, no
+REM elevated permissions needed, still runs the exact pinned version.
 pushd frontend
-call yarn install
+call corepack yarn install
 set FRONTEND_INSTALL_RESULT=%errorlevel%
 popd
 if not %FRONTEND_INSTALL_RESULT%==0 (
