@@ -19,8 +19,17 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM The "py" launcher (py.exe) is a separate, optional install from
+REM python.exe itself - some installs put python.exe on PATH without it.
+REM Accept either.
+set PYCMD=
 where py >nul 2>&1
-if errorlevel 1 (
+if not errorlevel 1 set PYCMD=py -3
+if not defined PYCMD (
+    where python >nul 2>&1
+    if not errorlevel 1 set PYCMD=python
+)
+if not defined PYCMD (
     echo [ERROR] Python not found. Install Python first:
     echo         https://www.python.org/downloads/
     pause
@@ -58,7 +67,7 @@ echo.
 REM --- Backend virtual environment ---
 if not exist "backend\.venv\Scripts\python.exe" (
     echo Creating backend virtual environment...
-    py -3 -m venv "backend\.venv"
+    !PYCMD! -m venv "backend\.venv"
 ) else (
     echo Backend virtual environment already exists, skipping.
 )
