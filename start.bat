@@ -21,6 +21,11 @@ if not exist "frontend\node_modules" (
     pause
     exit /b 1
 )
+if not exist "frontend\build\index.html" (
+    echo [ERROR] Frontend hasn't been built yet. Run setup.bat first.
+    pause
+    exit /b 1
+)
 
 REM --- Make sure Docker Desktop is running ---
 docker info >nul 2>&1
@@ -42,22 +47,21 @@ echo Starting MongoDB container...
 docker start pharmascrape-mongo >nul 2>&1
 echo.
 
-REM --- Backend, in its own window ---
-echo Starting backend on http://localhost:8001 ...
-start "PharmaScrape Backend" cmd /k "cd /d "%~dp0backend" && .venv\Scripts\python.exe -m uvicorn server:app --host 127.0.0.1 --port 8001"
-
-REM --- Frontend, in its own window ---
-echo Starting frontend on http://localhost:3000 ...
-start "PharmaScrape Frontend" cmd /k "cd /d "%~dp0frontend" && corepack yarn start"
+REM --- Backend, in its own window. It serves the frontend/build directory
+REM directly (see server.py's catch-all route) - single origin, single port,
+REM which is what a Cloudflare Tunnel / LAN visitor actually needs to reach.
+echo Starting the app on http://localhost:8001 ...
+start "PharmaScrape" cmd /k "cd /d "%~dp0backend" && .venv\Scripts\python.exe -m uvicorn server:app --host 127.0.0.1 --port 8001"
 
 echo.
 echo ============================================
-echo  Both servers are starting in their own windows.
-echo  Wait for the frontend window to say
-echo  "Compiled successfully", then open:
+echo  Starting in its own window. Once it says
+echo  "Application startup complete", open:
 echo.
-echo      http://localhost:3000
+echo      http://localhost:8001
 echo.
-echo  Close those windows (or Ctrl+C in each) to stop.
+echo  Close that window (or Ctrl+C in it) to stop.
+echo  Made frontend code changes? They won't show up
+echo  here until you rerun setup.bat to rebuild.
 echo ============================================
 pause

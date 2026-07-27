@@ -166,6 +166,20 @@ if not %FRONTEND_INSTALL_RESULT%==0 (
     exit /b 1
 )
 
+echo Building the frontend for production...
+REM start.bat serves this build directly from the backend (single origin,
+REM single port - see server.py's catch-all route) rather than running the
+REM CRA dev server, since that's what an actual tunnel/LAN visitor needs.
+pushd frontend
+call corepack yarn build
+set FRONTEND_BUILD_RESULT=%errorlevel%
+popd
+if not %FRONTEND_BUILD_RESULT%==0 (
+    echo [ERROR] Frontend build failed - see the output above.
+    pause
+    exit /b 1
+)
+
 echo.
 echo ============================================
 echo  Setup complete!
