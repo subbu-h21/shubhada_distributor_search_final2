@@ -7,10 +7,12 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import re
 import io
+import time
 import logging
 import asyncio
 import random
 import uuid
+from collections import defaultdict
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -289,6 +291,48 @@ async def seed_if_empty():
 # ============================================================
 # AUTHENTICATION
 # ============================================================
+# In-memory login rate limiter (per-process; resets on restart). Keyed by both
+# client IP and username so a single account can't be brute-forced from many
+# IPs, and a single IP can't spray many usernames.
+_LOGIN_WINDOW_SECONDS = 15 * 60
+_LOGIN_MAX_ATTEMPTS = 5
+_failed_logins: Dict[str, List[float]] = defaultdict(list)
+
+
+def _login_rate_limit_keys(request: Request, username: str) -> List[str]:
+    # Behind Cloudflare Tunnel, request.client.host is always 127.0.0.1 (the
+    # tunnel connects locally) — use the real visitor IP Cloudflare forwards
+    # instead, falling back through the usual proxy headers, then the raw
+    # socket. Trusting these headers is safe here because the only thing that
+    # can reach this port at all is cloudflared / a local caller.
+    ip = (
+        request.headers.get("cf-connecting-ip")
+        or (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+        or (request.client.host if request.client else "unknown")
+    )
+    return [f"ip:{ip}", f"user:{username}"]
+
+
+def _check_login_rate_limit(request: Request, username: str) -> None:
+    now = time.time()
+    for key in _login_rate_limit_keys(request, username):
+        attempts = _failed_logins[key]
+        attempts[:] = [t for t in attempts if now - t < _LOGIN_WINDOW_SECONDS]
+        if len(attempts) >= _LOGIN_MAX_ATTEMPTS:
+            raise HTTPException(429, "Too many failed login attempts. Try again in a few minutes.")
+
+
+def _record_failed_login(request: Request, username: str) -> None:
+    now = time.time()
+    for key in _login_rate_limit_keys(request, username):
+        _failed_logins[key].append(now)
+
+
+def _clear_failed_logins(request: Request, username: str) -> None:
+    for key in _login_rate_limit_keys(request, username):
+        _failed_logins.pop(key, None)
+
+
 async def _get_user_by_username(username: str) -> Optional[dict]:
     return await db.users.find_one({"username": username.lower()})
 
@@ -310,10 +354,14 @@ async def _current_user_from_request(request) -> Optional[dict]:
 
 
 @api_router.post("/auth/login", response_model=LoginResponse)
-async def auth_login(payload: LoginRequest):
-    user = await _get_user_by_username(payload.username.strip().lower())
+async def auth_login(payload: LoginRequest, request: Request):
+    username = payload.username.strip().lower()
+    _check_login_rate_limit(request, username)
+    user = await _get_user_by_username(username)
     if not user or not verify_password(payload.password, user.get("hashedPassword", "")):
+        _record_failed_login(request, username)
         raise HTTPException(401, "Invalid username or password")
+    _clear_failed_logins(request, username)
     token = create_token(user["id"], user["username"])
     return LoginResponse(token=token, user=User(**{k: v for k, v in user.items() if k not in ("_id", "hashedPassword")}))
 
@@ -341,8 +389,8 @@ async def auth_change_password(payload: ChangePasswordRequest, authorization: Op
         raise HTTPException(401, "User no longer exists")
     if not verify_password(payload.current_password, user.get("hashedPassword", "")):
         raise HTTPException(400, "Current password is incorrect")
-    if len(payload.new_password) < 4:
-        raise HTTPException(400, "New password too short (min 4 chars)")
+    if len(payload.new_password) < 8:
+        raise HTTPException(400, "New password too short (min 8 chars)")
     await db.users.update_one({"id": user["id"]}, {"$set": {"hashedPassword": hash_password(payload.new_password)}})
     return {"ok": True}
 
