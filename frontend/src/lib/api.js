@@ -1,7 +1,11 @@
 import axios from 'axios';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-export const API_BASE = `${BACKEND_URL}/api`;
+// Always relative — the backend serves both the API and this built frontend
+// from the same origin (see server.py's catch-all route), so there is no
+// separate backend URL to configure. In dev (`yarn start`), CRA's built-in
+// proxy (the "proxy" field in package.json) forwards these to the backend
+// on :8001 without needing this to be anything other than relative.
+export const API_BASE = '/api';
 
 const api = axios.create({
   baseURL: API_BASE,

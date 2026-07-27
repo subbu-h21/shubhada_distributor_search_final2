@@ -83,10 +83,6 @@ android-sdk/
 .env
 .env.*
 *.env
-# Exception: no secrets in this one (just build-time REACT_APP_* vars, which
-# get inlined into the public JS bundle regardless) — needed for `yarn build`
-# to produce a working same-origin bundle; losing it breaks prod builds silently.
-!frontend/.env.production
 credentials.json
 *.key
 .credentials

@@ -142,12 +142,10 @@ if errorlevel 1 (
 echo.
 
 REM --- Frontend ---
-if not exist "frontend\.env" (
-    echo REACT_APP_BACKEND_URL=http://localhost:8001> "frontend\.env"
-    echo [OK] frontend\.env created.
-) else (
-    echo frontend\.env already exists, leaving it alone.
-)
+REM No frontend .env needed - the frontend always calls a relative /api path
+REM (see src/lib/api.js) and package.json's "proxy" field handles routing
+REM that to the backend during local dev; the built app is same-origin in
+REM production, so there's nothing to configure either way.
 
 echo Installing frontend dependencies (this can take a few minutes)...
 REM Run the pinned yarn version straight through corepack instead of

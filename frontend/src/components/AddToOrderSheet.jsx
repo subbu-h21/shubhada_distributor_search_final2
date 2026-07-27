@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
-import { OrderAPI } from '../lib/api';
+import { OrderAPI, screenshotUrl } from '../lib/api';
 import { Loader2, CheckCircle2, ShoppingCart, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -63,8 +63,6 @@ const AddToOrderSheet = ({ open, onOpenChange, defaults }) => {
       toast.error(parsed.error || 'Order failed');
     } finally { setBusy(false); }
   };
-
-  const backendUrl = process.env.REACT_APP_BACKEND_URL;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -168,8 +166,8 @@ const AddToOrderSheet = ({ open, onOpenChange, defaults }) => {
                   <summary className="cursor-pointer font-semibold">SCREENSHOTS ({result.screenshots.filter(Boolean).length})</summary>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     {result.screenshots.filter(Boolean).map((s) => (
-                      <a key={s} href={`${backendUrl}/api/screenshots/${s}`} target="_blank" rel="noreferrer">
-                        <img src={`${backendUrl}/api/screenshots/${s}`} alt={s} className="w-full border border-neutral-300 rounded" />
+                      <a key={s} href={screenshotUrl(s)} target="_blank" rel="noreferrer">
+                        <img src={screenshotUrl(s)} alt={s} className="w-full border border-neutral-300 rounded" />
                       </a>
                     ))}
                   </div>
