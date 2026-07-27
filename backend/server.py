@@ -1311,6 +1311,28 @@ async def auth_middleware(request, call_next):
     return await call_next(request)
 
 
+# ---- Serve the built frontend (production hosting) ----
+# During active development the CRA dev server on :3000 handles the frontend
+# and talks to this backend on :8001 as a separate origin. For hosting this
+# app on the local network / behind a tunnel, `yarn build` produces a static
+# bundle that this backend serves directly so frontend + API share one origin
+# — no CORS, one port for a tunnel to point at. Mounted last so every /api/*
+# route above always matches first; only activates if frontend/build exists,
+# so plain local dev (no build present) is unaffected.
+FRONTEND_BUILD_DIR = ROOT_DIR.parent / "frontend" / "build"
+
+if FRONTEND_BUILD_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(FRONTEND_BUILD_DIR / "static")), name="frontend-static")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        candidate = FRONTEND_BUILD_DIR / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(str(candidate))
+        # Client-side routes (e.g. /search, /history) fall back to index.html
+        return FileResponse(str(FRONTEND_BUILD_DIR / "index.html"))
+
+
 @app.on_event("startup")
 async def on_startup():
     try:
